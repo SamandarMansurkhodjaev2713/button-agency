@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /button-agency/
+Sitemap: https://samandarmansurkhodjaev2713.github.io/button-agency/sitemap.xml
