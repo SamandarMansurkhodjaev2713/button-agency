@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Замер плавности BUTTON</title>
+<style>
+  :root { font: 16px/1.55 system-ui,sans-serif; color-scheme: dark; background:#0b0b0d; color:#f7f6f7 }
+  body { margin:0 }
+  main { max-width:36rem; margin:auto; padding:clamp(1rem,6vw,4rem) }
+  h1 { font-size:clamp(2rem,8vw,3.5rem); line-height:1.04; margin:0 0 1rem }
+  p { color:#c8c2c8 }
+  button { min-height:46px; padding:.55rem 1rem; font:inherit; font-weight:700; border:0; color:#0b0b0d; background:#ff456f }
+  button:focus-visible { outline:2px solid white; outline-offset:4px }
+  iframe { position:fixed; inset:0; width:100%; height:100dvh; border:0 }
+  output { display:block; white-space:pre-wrap; font-variant-numeric:tabular-nums; margin-block:1rem }
+  output:empty { display:none }
+  aside { position:fixed; z-index:1; right:.65rem; top:.65rem; background:#0b0b0d; color:#fff; padding:.45rem .7rem; font-size:.78rem; pointer-events:none }
+</style>
+<main>
+  <h1>Замер плавности BUTTON</h1>
+  <p>Откройте страницу на нужном устройстве, держите вкладку на экране и дождитесь результата. Три прогона займут около 20 секунд.</p>
+  <p>Замер показывает частоту кадровых вызовов браузера и интервалы между ними. Результаты остаются в этой вкладке.</p>
+  <button id="start" type="button">Начать замер</button>
+  <output id="result" aria-live="polite"></output>
+  <button id="copy" type="button" hidden>Скопировать результат</button>
+</main>
+<aside id="phase" hidden></aside>
+<script type="module">
+  const start = document.querySelector('#start');
+  const result = document.querySelector('#result');
+  const copy = document.querySelector('#copy');
+  const phase = document.querySelector('#phase');
+  const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+  function sample(view, duration, draw = () => {}) {
+    return new Promise((resolve, reject) => {
+      let first, previous, request;
+      const intervals = [];
+      const timeout = setTimeout(() => {
+        view.cancelAnimationFrame(request);
+        reject(new Error('Вкладка замедлена браузером. Оставьте её открытой на экране и повторите.'));
+      }, duration + 2200);
+      const tick = time => {
+        if (document.hidden) {
+          clearTimeout(timeout);
+          reject(new Error('Вкладка ушла в фон. Запустите замер заново.'));
+          return;
+        }
+        first ??= time;
+        if (previous !== undefined) intervals.push(time - previous);
+        previous = time;
+        const progress = Math.min(1, (time - first) / duration);
+        draw(progress);
+        if (progress < 1) request = view.requestAnimationFrame(tick);
+        else {
+          clearTimeout(timeout);
+          const sorted = intervals.slice().sort((a,b) => a - b);
+          if (!intervals.length || sorted[Math.floor(sorted.length * .5)] > 100) {
+            reject(new Error('Браузер ограничил кадры. Повторите в активной вкладке.'));
+            return;
+          }
+          resolve({
+            fps: intervals.length * 1000 / (time - first),
+            p95: sorted[Math.floor(sorted.length * .95)],
+            max: sorted.at(-1),
+            late: sorted.filter(interval => interval > 34).length,
+          });
+        }
+      };
+      request = view.requestAnimationFrame(tick);
+    });
+  }
+
+  const median = values => values.slice().sort((a,b) => a - b)[1];
+  function describe(label, runs) {
+    return `${label} — ${median(runs.map(run => run.fps)).toFixed(1)} кадр/с · P95 ${median(runs.map(run => run.p95)).toFixed(1)} мс · худший кадр ${Math.max(...runs.map(run => run.max)).toFixed(1)} мс · >34 мс: ${runs.reduce((sum,run) => sum + run.late,0)}`;
+  }
+
+  start.addEventListener('click', async () => {
+    start.disabled = true;
+    copy.hidden = true;
+    result.textContent = '';
+    phase.hidden = false;
+    phase.textContent = 'Подготовка';
+    const frame = document.createElement('iframe');
+    frame.title = 'BUTTON — тестируемая страница';
+    try {
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Сайт не загрузился. Повторите замер.')), 12000);
+        frame.addEventListener('load', () => { clearTimeout(timeout); resolve(); }, { once:true });
+        frame.src = './ru/?measure=frames';
+        document.body.append(frame);
+      });
+      const view = frame.contentWindow;
+      const doc = frame.contentDocument;
+      for (let attempt = 0; attempt < 40 && !doc.querySelector('.agency-site'); attempt++) await delay(100);
+      await Promise.race([doc.fonts.ready, delay(1800)]);
+      if (view.matchMedia('(prefers-reduced-motion: reduce)').matches || doc.documentElement.classList.contains('motion-off')) {
+        throw new Error('Движение отключено настройками устройства или сайта. Для этого замера его нужно включить.');
+      }
+      const work = doc.querySelector('#works.portfolio-pinned');
+      if (!work) throw new Error('Для проверки переходов откройте страницу в портретном режиме с высотой не меньше 600 CSS-пикселей.');
+      const stage = work.querySelector('.portfolio-stage');
+      const scroll = y => view.scrollTo({top:y,behavior:'instant'});
+      const idle = [], hero = [], cases = [];
+      for (let pass = 1; pass <= 3; pass++) {
+        scroll(0);
+        phase.textContent = `${pass}/3 · Подготовка`;
+        await delay(180);
+        idle.push(await sample(view, 520));
+        phase.textContent = `${pass}/3 · Hero`;
+        view.dispatchEvent(new view.Event('button:replay-intro'));
+        hero.push(await sample(view, 1750));
+        const pin = view.innerWidth <= 800 ? 78 : 96;
+        const origin = work.parentElement.getBoundingClientRect().top + view.scrollY - pin;
+        const range = work.offsetHeight - stage.offsetHeight;
+        scroll(origin + range * .11);
+        await delay(320);
+        phase.textContent = `${pass}/3 · Переходы между кейсами`;
+        cases.push(await sample(view, 2700, progress => scroll(origin + range * (.11 + .79 * progress))));
+      }
+      result.textContent = [
+        `BUTTON · ${view.innerWidth} × ${view.innerHeight} CSS px`,
+        describe('Покой', idle),
+        describe('Hero', hero),
+        describe('Переходы', cases),
+      ].join('\n');
+      copy.hidden = !navigator.clipboard;
+      copy.textContent = 'Скопировать результат';
+    } catch (error) {
+      result.textContent = error.message;
+    } finally {
+      frame.remove();
+      phase.hidden = true;
+      start.disabled = false;
+    }
+  });
+
+  copy.addEventListener('click', async () => {
+    await navigator.clipboard.writeText(result.textContent);
+    copy.textContent = 'Скопировано';
+  });
+</script>
+</html>

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 500">
+  <defs>
+    <linearGradient id="face" x1=".15" y1="0" x2=".8" y2="1">
+      <stop stop-color="#ff456f"/>
+      <stop offset=".36" stop-color="#ff003c"/>
+      <stop offset="1" stop-color="#d40032"/>
+    </linearGradient>
+    <linearGradient id="depth" x1="0" y1="0" x2=".9" y2="1">
+      <stop stop-color="#b80029"/>
+      <stop offset="1" stop-color="#520015"/>
+    </linearGradient>
+    <pattern id="lines" width="5" height="5" patternUnits="userSpaceOnUse">
+      <path d="M0 1h5" stroke="#fff" stroke-opacity=".09"/>
+    </pattern>
+    <path id="mark" d="M142 94H423V376H359V204L174 390L117 333L302 148H142Z"/>
+  </defs>
+  <use href="#mark" transform="translate(31 36)" fill="#560016"/>
+  <path d="M423 94l31 36v282l-31-36zM423 376l31 36h-64l-31-36zM359 204l31 36-185 186-31-36zM174 390l31 36-57-57-31-36zM302 148l31 36H173l-31-36z" fill="url(#depth)"/>
+  <path d="M428 101v281m7-272v281m7-273v281m7-273v281" stroke="#ff4771" stroke-opacity=".23"/>
+  <use href="#mark" fill="url(#face)" stroke="#ff6289" stroke-width="1.2" stroke-linejoin="round"/>
+  <use href="#mark" fill="url(#lines)"/>
+  <path d="M143 98h276m-53 273V196L174 385" fill="none" stroke="#fff" stroke-opacity=".23" stroke-width="1.4"/>
+</svg>
